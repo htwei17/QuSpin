@@ -20,6 +20,7 @@ def _check_almost_zero(matrix):
 
 
 def _consolidate_static(static_list):
+	""" Sum up all the terms in static_list that have the same opstr and bond index. """
 	eps = 10 * _np.finfo(_np.float64).eps
 
 	static_dict={}
@@ -28,7 +29,7 @@ def _consolidate_static(static_list):
 			static_dict[opstr] = {}
 
 		for bond in bonds:
-			J = bond[0]
+			J = bond[0] # the coupling coefficient
 			indx = tuple(bond[1:])
 			if indx in static_dict[opstr]:
 				static_dict[opstr][indx] += J
@@ -38,7 +39,7 @@ def _consolidate_static(static_list):
 	static_list = []
 	for opstr,opstr_dict in static_dict.items():
 		for indx,J in opstr_dict.items():
-			if _np.abs(J) > eps:
+			if _np.abs(J) > eps: # only add non-zero terms
 				static_list.append((opstr,indx,J))
 
 

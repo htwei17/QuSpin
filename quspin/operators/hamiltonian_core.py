@@ -318,7 +318,7 @@ class hamiltonian(object):
 				self._basis.check_pcon(static_opstr_list,dynamic_opstr_list)
 
 
-
+			# Make static and dynamic matrices
 			self._static=make_static(self._basis,static_opstr_list,dtype)
 			self._dynamic=make_dynamic(self._basis,dynamic_opstr_list,dtype)
 			self._shape = self._static.shape

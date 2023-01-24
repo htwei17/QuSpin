@@ -244,15 +244,15 @@ class basis(object):
 					else:
 						off_diag = off_diag + _sp.csr_matrix((ME,(row,col)),shape=(self.Ns,self.Ns),dtype=dtype) 
 
-		if diag is not None and off_diag is not None:
+		if diag is not None and off_diag is not None: # General sparse matrix in CSR format
 			indptr = _np.arange(self.Ns+1)
 			return off_diag + _sp.csr_matrix((diag,indptr[:self.Ns],indptr),shape=(self.Ns,self.Ns),dtype=dtype)
 
-		elif off_diag is not None:
-			return off_diag
-		elif diag is not None:
+		elif off_diag is not None: # Pure off-diagonal matrix in CSR format
+			return off_diag 
+		elif diag is not None: # Pure diagonal matrix in DIA format
 			return _sp.dia_matrix((_np.atleast_2d(diag),[0]),shape=(self.Ns,self.Ns),dtype=dtype)
-		else:
+		else: # Empty matrix in DIA format
 			return _sp.dia_matrix((self.Ns,self.Ns),dtype=dtype)
 
 	def partial_trace(self,state,sub_sys_A=None,subsys_ordering=True,return_rdm="A",enforce_pure=False,sparse=False):
