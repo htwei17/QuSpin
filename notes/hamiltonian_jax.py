@@ -1,23 +1,24 @@
 from __future__ import print_function, division, absolute_import
 
-from ..basis import spin_basis_1d as _default_basis
-from ..basis import isbasis as _isbasis
+from ..quspin.basis import spin_basis_1d as _default_basis
+from ..quspin.basis import isbasis as _isbasis
 
-from ..tools.evolution import evolve
+from ..quspin.tools.evolution import evolve
 
-from ..tools.matvec import _matvec
-from ..tools.matvec import _get_matvec_function
+from ..quspin.tools.matvec import _matvec
+from ..quspin.tools.matvec import _get_matvec_function
 
 # from ._oputils import matvec as _matvec
 # from ._oputils import _get_matvec_function
 
 # from .exp_op_core import isexp_op,exp_op
 
-from ._make_hamiltonian import make_static
-from ._make_hamiltonian import make_dynamic
-from ._make_hamiltonian import test_function
-from ._make_hamiltonian import _check_almost_zero
-from ._functions import function
+from ..quspin.operators._make_hamiltonian import make_static
+from ..quspin.operators._make_hamiltonian import make_dynamic
+from ..quspin.operators._make_hamiltonian import test_function
+from ..quspin.operators._make_hamiltonian import _check_almost_zero
+from ..quspin.operators._functions import function
+from ..quspin.operators.hamiltonian_core import *
 
 # need linear algebra packages
 # Jax packages
@@ -48,75 +49,7 @@ except ImportError:
 import warnings
 
 
-__all__ = ["commutator", "anti_commutator", "hamiltonian", "ishamiltonian"]
-
-
-def commutator(H1, H2):
-    """ Calculates the commutator of two Hamiltonians :math:`H_1` and :math:`H_2`.
-
-    .. math::
-            [H_1,H_2] = H_1 H_2 - H_2 H_1
-
-    Examples
-    --------
-    The following script shows how to compute the commutator of two `hamiltonian` objects.
-
-    .. literalinclude:: ../../doc_examples/commutator-example.py
-            :linenos:
-            :language: python
-            :lines: 7-
-
-    Parameters
-    -----------
-    H1 : obj
-            `numpy.ndarray` or `hamiltonian` class object to define the Hamiltonian operator as a matrix.
-    H2 : obj
-            `numpy.ndarray` or `hamiltonian` class object to define the Hamiltonian operator as a matrix. 
-
-    Returns
-    --------
-    obj
-            Commutator: :math:`[H_1,H_2] = H_1 H_2 - H_2 H_1`
-    """
-    if ishamiltonian(H1) or ishamiltonian(H2):
-        return H1*H2 - H2*H1
-    else:
-        return H1.dot(H2) - H2.dot(H1)
-
-
-def anti_commutator(H1, H2):
-    """ Calculates the anticommutator of two Hamiltonians :math:`H_1` and :math:`H_2`.
-
-    .. math::
-            \\{H_1,H_2\\}_+ = H_1 H_2 + H_2 H_1
-
-
-    Examples
-    --------
-    The following script shows how to compute the anticommutator of two `hamiltonian` objects.
-
-    .. literalinclude:: ../../doc_examples/anti_commutator-example.py
-            :linenos:
-            :language: python
-            :lines: 7-
-
-    Parameters
-    -----------
-    H1 : obj
-            `numpy.ndarray` or `hamiltonian` class object to define the Hamiltonian operator as a matrix.
-    H2 : obj
-            `numpy.ndarray` or `hamiltonian` class object to define the Hamiltonian operator as a matrix. 
-
-    Returns
-    --------
-    obj
-            Anticommutator: :math:`\\{H_1,H_2\\}_+ = H_1 H_2 + H_2 H_1`
-
-    """
-    if ishamiltonian(H1) or ishamiltonian(H2):
-        return H1*H2 + H2*H1
-    else:
-        return H1.dot(H2) + H2.dot(H1)
+__all__ = ["hamiltonian_jax"]
 
 
 class HamiltonianEfficiencyWarning(Warning):
@@ -131,13 +64,13 @@ supported_dtypes = tuple(
 def _check_static(sub_list):
     """Checks format of static list. """
     if (type(sub_list) in [list, tuple]) and (len(sub_list) == 2):
-        if type(sub_list[0]) is not str:
+        if type(sub_list[0]) is not str: # optstr
             raise TypeError('expecting string type for opstr')
-        if type(sub_list[1]) in [list, tuple]:
-            for sub_sub_list in sub_list[1]:
+        if type(sub_list[1]) in [list, tuple]: # [[coupling1, i1, j1], [coupling2, i2, j2], ...]
+            for sub_sub_list in sub_list[1]: # [coupling1, i1, j1]
                 if (type(sub_sub_list) in [list, tuple]) and (len(sub_sub_list) > 0):
                     for element in sub_sub_list:
-                        if not _np.isscalar(element):
+                        if not _np.isscalar(element): # jax can autogdiff with numpy scalars
                             raise TypeError(
                                 'expecting scalar elements of indx')
                 else:
@@ -194,7 +127,7 @@ def _hamiltonian_dot(hamiltonian, time, v):
     return hamiltonian.dot(v, time=time, check=False)
 
 
-class hamiltonian(object):
+class hamiltonian_jax(hamiltonian):
     """Constructs time-dependent (hermitian and nonhermitian) operators.
 
     The `hamiltonian` class wraps most of the functionalty of the QuSpin package. This object allows the user to construct 
@@ -347,6 +280,7 @@ class hamiltonian(object):
             if check_pcon:
                 self._basis.check_pcon(static_opstr_list, dynamic_opstr_list)
 
+            # create static and dynamic matrices
             self._static = make_static(self._basis, static_opstr_list, dtype)
             self._dynamic = make_dynamic(
                 self._basis, dynamic_opstr_list, dtype)
@@ -386,7 +320,7 @@ class hamiltonian(object):
                     raise ValueError('hamiltonian must be square matrix')
 
                 self._shape = shape
-                self._static = _sp.dia_matrix(self._shape, dtype=self._dtype)
+                self._static = _jsp.BCOO(self._shape, dtype=self._dtype)
                 self._dynamic = {}
 
             for O in static_other_list:
@@ -438,7 +372,7 @@ class hamiltonian(object):
 
                     O = O.astype(self._dtype, copy=copy)
                 else:
-                    O = _np.array(O, copy=copy, dtype=self._dtype)
+                    O = _jnp.array(O, copy=copy, dtype=self._dtype)
                     self._mat_checks(O)
                     self._is_dense = True
 
@@ -482,109 +416,11 @@ class hamiltonian(object):
                     raise ValueError('hamiltonian must be square matrix')
 
                 self._shape = shape
-                self._static = _sp.dia_matrix(self._shape, dtype=self._dtype)
+                self._static = _jsp.BCOO(self._shape, dtype=self._dtype)
                 self._dynamic = {}
 
         self.update_matrix_formats(static_fmt, dynamic_fmt)
         self._Ns = self._shape[0]
-
-    @property
-    def basis(self):
-        """:obj:`basis`: basis used to build the `hamiltonian` object.
-
-        Defaults to `None` if operator has no basis (i.e. was created externally and passed as a precalculated array).
-
-        """
-        if self._basis is not None:
-            return self._basis
-        else:
-            raise AttributeError("object has no attribute 'basis'")
-
-    @property
-    def ndim(self):
-        """int: number of dimensions, always equal to 2. """
-        return self._ndim
-
-    @property
-    def Ns(self):
-        """int: number of states in the (symmetry-reduced) Hilbert space spanned by `basis`."""
-        return self._Ns
-
-    @property
-    def shape(self):
-        """tuple: shape of the `hamiltonian` object, always equal to `(Ns,Ns)`."""
-        return self._shape
-
-    # @property
-    # def ndim(self):
-    # 	"""int: number of dimensions, always equal to 2. """
-    # 	return len(self._shape)
-
-    @property
-    def get_shape(self):
-        """tuple: shape of the `hamiltonian` object, always equal to `(Ns,Ns)`."""
-        return self._shape
-
-    @property
-    def is_dense(self):
-        """bool: checks sparsity of operator matrix.
-
-        `True` if the operator contains a dense matrix as a component of either 
-        the static or dynamic lists.
-
-        """
-        return self._is_dense
-
-    @property
-    def dtype(self):
-        """type: data type of `hamiltonian` object."""
-        return _np.dtype(self._dtype).name
-
-    @property
-    def static(self):
-        """scipy.sparse.csr: static part of the operator."""
-        return self._static
-
-    @property
-    def dynamic(self):
-        """dict: contains dynamic parts of the operator as `dict(func=Hdyn)`. 
-
-        The key `func` is the memory address of the time-dependent function which can be called as `func(time)`. The function arguments are hard-coded, and are not passed. 
-        The value `Hdyn` is the sparse matrix to which the drive couples.
-
-        """
-        return self._dynamic
-
-    @property
-    def T(self):
-        """:obj:`hamiltonian`: transposes the operator matrix, :math:`H_{ij}\\mapsto H_{ji}`."""
-        return self.transpose()
-
-    @property
-    def H(self):
-        """:obj:`hamiltonian`: transposes and conjugates the operator matrix, :math:`H_{ij}\\mapsto H_{ji}^*`."""
-        return self.getH()
-
-    @property
-    def nbytes(self):
-        """float: Total bytes consumed by the elements of the `hamiltonian` array."""
-        nbytes = 0
-        if _sp.issparse(self._static):
-            nbytes += self._static.data.nbytes
-            nbytes += self._static.indices.nbytes
-            nbytes += self._static.indptr.nbytes
-        else:
-            nbytes += self._static.nbytes
-
-        for Hd in itervalues(self._dynamic):
-            if _sp.issparse(Hd):
-                nbytes += Hd.data.nbytes
-                nbytes += Hd.indices.nbytes
-                nbytes += Hd.indptr.nbytes
-            else:
-                nbytes += Hd.nbytes
-
-        return nbytes
 
     def check_is_dense(self):
         """ updates attribute `_.is_dense`."""
@@ -593,14 +429,6 @@ class hamiltonian(object):
             is_sparse *= _sp.issparse(Hd)
 
         self._is_dense = not is_sparse
-
-    def _get_matvecs(self):
-        self._static_matvec = _get_matvec_function(self._static)
-        self._dynamic_matvec = {}
-        for func, Hd in iteritems(self._dynamic):
-            self._dynamic_matvec[func] = _get_matvec_function(Hd)
-
-    # state manipulation/observable routines
 
     def dot(self, V, time=0, check=True, out=None, overwrite_out=True, a=1.0):
         """Matrix-vector multiplication of `hamiltonian` operator at time `time`, with state `V`.
@@ -649,7 +477,7 @@ class hamiltonian(object):
 
         """
 
-        from .exp_op_core import isexp_op
+        from ..quspin.operators.exp_op_core import isexp_op
 
         if ishamiltonian(V):
             return a*(self * V)
@@ -697,10 +525,10 @@ class hamiltonian(object):
                     raise ValueError("Density matrices must be square!")
 
                 # allocate C-contiguous array to output results in.
-                out = _np.zeros(V.shape[-1:]+V.shape[:-1], dtype=result_dtype)
+                out = _jnp.zeros(V.shape[-1:]+V.shape[:-1], dtype=result_dtype)
 
                 for i, t in enumerate(times):
-                    v = _np.ascontiguousarray(V[..., i], dtype=result_dtype)
+                    v = _jnp.ascontiguousarray(V[..., i], dtype=result_dtype)
                     self._static_matvec(
                         self._static, v, overwrite_out=True, out=out[i, ...], a=a)
                     for func, Hd in iteritems(self._dynamic):
@@ -866,7 +694,7 @@ class hamiltonian(object):
 
         """
 
-        from .exp_op_core import isexp_op
+        from ..quspin.operators.exp_op_core import isexp_op
 
         if ishamiltonian(V):
             raise TypeError("Can't take expectation value of hamiltonian")
@@ -923,7 +751,7 @@ class hamiltonian(object):
         corresponds to :math:`H_{expt} = \\langle V|H(t=0)|V\\rangle`. 
 
         """
-        from .exp_op_core import isexp_op
+        from ..quspin.operators.exp_op_core import isexp_op
 
         if ishamiltonian(V):
             raise TypeError("Can't take expectation value of hamiltonian")
@@ -937,18 +765,18 @@ class hamiltonian(object):
     def _expt_value_core(self, V_left, V_right, enforce_pure=False):
         if _sp.issparse(V_right):
             if V_left.shape[0] != V_left.shape[1] or enforce_pure:  # pure states
-                return _np.asarray((V_right.multiply(V_left.conj())).sum(axis=0)).squeeze()
+                return _jnp.asarray((V_right.multiply(V_left.conj())).sum(axis=0)).squeeze()
             else:  # density matrix
                 return V_right.diagonal().sum()
         else:
-            V_right = _np.asarray(V_right)
+            V_right = _jnp.asarray(V_right)
             if V_right.ndim == 1:  # single pure state
-                return _np.vdot(V_left, V_right)
+                return _jnp.vdot(V_left, V_right)
             # multiple pure states
             elif (V_right.shape[0] != V_right.shape[1] or enforce_pure):
-                return _np.einsum("ij,ij->j", V_left.conj(), V_right)
+                return _jnp.einsum("ij,ij->j", V_left.conj(), V_right)
             else:  # density matrices
-                return _np.einsum("ii...->...", V_right)
+                return _jnp.einsum("ii...->...", V_right)
 
     def matrix_ele(self, Vl, Vr, time=0, diagonal=False, check=True):
         """Calculates matrix element of `hamiltonian` operator at time `time` in states `Vl` and `Vr`.
@@ -997,7 +825,7 @@ class hamiltonian(object):
             try:
                 shape = Vl.shape
             except AttributeError:
-                Vl = _np.asarray(Vl)
+                Vl = _jnp.asarray(Vl)
                 shape = Vl.shape
 
             if Vl.shape[0] != self._shape[1]:
@@ -1014,17 +842,17 @@ class hamiltonian(object):
 
         if _sp.issparse(Vl):
             if diagonal:
-                return _np.asarray(Vl.conj().multiply(Vr).sum(axis=0)).squeeze()
+                return _jnp.asarray(Vl.conj().multiply(Vr).sum(axis=0)).squeeze()
             else:
                 return Vl.H.dot(Vr)
         elif _sp.issparse(Vr):
             if diagonal:
-                return _np.asarray(Vr.multiply(Vl.conj()).sum(axis=0)).squeeze()
+                return _jnp.asarray(Vr.multiply(Vl.conj()).sum(axis=0)).squeeze()
             else:
                 return Vr.T.dot(Vl.conj())
         else:
             if diagonal:
-                return _np.einsum("ij,ij->j", Vl.conj(), Vr)
+                return _jnp.einsum("ij,ij->j", Vl.conj(), Vr)
             else:
                 return Vl.T.conj().dot(Vr)
 
@@ -1074,7 +902,7 @@ class hamiltonian(object):
         correponds to :math:`V^\\dagger H V`.
 
         """
-        from .exp_op_core import isexp_op
+        from ..quspin.operators.exp_op_core import isexp_op
 
         if ishamiltonian(proj):
             new = self._rmul_hamiltonian(proj.getH())
@@ -1181,7 +1009,7 @@ class hamiltonian(object):
         corresponds to :math:`\\exp(K^\\dagger) H \\exp(K)`.
 
         """
-        from .exp_op_core import exp_op
+        from ..quspin.operators.exp_op_core import exp_op
 
         if generator:
             return exp_op(other, **exp_op_kwargs).sandwich(self)
@@ -1225,9 +1053,9 @@ class hamiltonian(object):
                 return_eigenvectors = True
 
             if return_eigenvectors:
-                return _np.array([], dtype=self._dtype).real, _np.array([[]], dtype=self._dtype)
+                return _jnp.array([], dtype=self._dtype).real, _jnp.array([[]], dtype=self._dtype)
             else:
-                return _np.array([], dtype=self._dtype).real
+                return _jnp.array([], dtype=self._dtype).real
 
         return _sla.eigsh(self.tocsr(time=time), **eigsh_args)
 
@@ -1261,7 +1089,7 @@ class hamiltonian(object):
 
         """
         if self.Ns <= 0:
-            return _np.array([], dtype=self._dtype).real, _np.array([[]], dtype=self._dtype)
+            return _jnp.array([], dtype=self._dtype).real, _jnp.array([[]], dtype=self._dtype)
 
         eigh_args["overwrite_a"] = True
         # fill dense array with hamiltonian
@@ -1299,7 +1127,7 @@ class hamiltonian(object):
 
         """
         if self.Ns <= 0:
-            return _np.array([], dtype=self._dtype).real
+            return _jnp.array([], dtype=self._dtype).real
 
         H_dense = self.todense(time=time)
         eigvalsh_args["overwrite_a"] = True
@@ -1477,7 +1305,7 @@ class hamiltonian(object):
             v0 = _np.asanyarray(v0)
             shape0 = v0.shape
 
-        if _np.iscomplexobj(times):
+        if _jnp.iscomplexobj(times):
             raise ValueError("times must be real number(s).")
 
         evolve_args = (v0, t0, times)
@@ -1501,26 +1329,26 @@ class hamiltonian(object):
                         "stack state is not compatible with imaginary time evolution.")
 
                 evolve_args = evolve_args + (self.__ISO,)
-                result_dtype = _np.result_type(
-                    v0.dtype, self.dtype, _np.float64)
-                v0 = _np.array(v0, dtype=result_dtype, copy=True, order="C")
+                result_dtype = _jnp.result_type(
+                    v0.dtype, self.dtype, _jnp.float64)
+                v0 = _jnp.array(v0, dtype=result_dtype, copy=True, order="C")
                 evolve_kwargs["f_params"] = (v0,)
-                evolve_kwargs["real"] = not _np.iscomplexobj(v0)
+                evolve_kwargs["real"] = not _jnp.iscomplexobj(v0)
 
             else:
                 evolve_kwargs["real"] = False
                 if stack_state:
                     # no idea how to do this in python :D
-                    if _np.iscomplexobj(_np.array(1, dtype=self.dtype)):
+                    if _jnp.iscomplexobj(_jnp.array(1, dtype=self.dtype)):
                         raise ValueError(
                             'stack_state option cannot be used with complex-valued Hamiltonians')
                     shape = (v0.shape[0]*2,)+v0.shape[1:]
-                    v0 = _np.zeros(shape, dtype=_np.float64, order="C")
+                    v0 = _jnp.zeros(shape, dtype=_jnp.float64, order="C")
                     evolve_kwargs["f_params"] = (v0,)
 
                     evolve_args = evolve_args + (self.__SO_real,)
                 else:
-                    v0 = _np.array(v0, dtype=_np.complex128,
+                    v0 = _jnp.array(v0, dtype=_jnp.complex128,
                                    copy=True, order="C")
                     evolve_kwargs["f_params"] = (v0,)
                     evolve_args = evolve_args + (self.__SO,)
@@ -1541,7 +1369,7 @@ class hamiltonian(object):
                     raise NotImplementedError(
                         "stack_state not implemented for Liouville-von Neumann dynamics")
                 else:
-                    v0 = _np.array(v0, dtype=_np.complex128,
+                    v0 = _jnp.array(v0, dtype=_jnp.complex128,
                                    copy=True, order="C")
                     evolve_kwargs["f_params"] = (v0,)
                     evolve_args = evolve_args + (self.__LO,)
@@ -1574,7 +1402,7 @@ class hamiltonian(object):
         >>> H_aslinop=H.aslinearoperator(time=time)
 
         """
-        time = _np.array(time)
+        time = _jnp.array(time)
         if time.ndim > 0:
             raise TypeError('expecting scalar argument for time')
 
@@ -1604,7 +1432,7 @@ class hamiltonian(object):
 
         """
 
-        if _np.array(time).ndim > 0:
+        if _jnp.array(time).ndim > 0:
             raise TypeError('expecting scalar argument for time')
 
         H = _sp.csr_matrix(self._static)
@@ -1639,7 +1467,7 @@ class hamiltonian(object):
         >>> H_csc=H.tocsc(time=time)
 
         """
-        if _np.array(time).ndim > 0:
+        if _jnp.array(time).ndim > 0:
             raise TypeError('expecting scalar argument for time')
 
         H = _sp.csc_matrix(self._static)
@@ -1690,12 +1518,12 @@ class hamiltonian(object):
 
         """
 
-        if _np.array(time).ndim > 0:
+        if _jnp.array(time).ndim > 0:
             raise TypeError('expecting scalar argument for time')
 
         if out is None:
-            out = _np.zeros(self._shape, dtype=self.dtype)
-            out = _np.asmatrix(out)
+            out = _jnp.zeros(self._shape, dtype=self.dtype)
+            out = _jnp.asmatrix(out)
 
         if _sp.issparse(self._static):
             self._static.todense(order=order, out=out)
@@ -1737,11 +1565,11 @@ class hamiltonian(object):
 
         """
 
-        if _np.array(time).ndim > 0:
+        if _jnp.array(time).ndim > 0:
             raise TypeError('expecting scalar argument for time')
 
         if out is None:
-            out = _np.zeros(self._shape, dtype=self.dtype)
+            out = _jnp.zeros(self._shape, dtype=self.dtype)
 
         if _sp.issparse(self._static):
             self._static.toarray(order=order, out=out)
@@ -1786,7 +1614,7 @@ class hamiltonian(object):
                 if _sp.issparse(self._static):
                     self._static = self._static.toarray()
                 else:
-                    self._static = _np.ascontiguousarray(self._static)
+                    self._static = _jnp.ascontiguousarray(self._static)
             else:
                 sparse_constuctor = getattr(_sp, static_fmt+"_matrix")
                 self._static = sparse_constuctor(self._static)
@@ -1801,7 +1629,7 @@ class hamiltonian(object):
                 if dynamic_fmt == "dense":
                     updates = {func: sparse_constuctor(Hd) for func, Hd in iteritems(
                         self._dynamic) if _sp.issparse(Hd)}
-                    updates.update({func: _np.ascontiguousarray(
+                    updates.update({func: _jnp.ascontiguousarray(
                         Hd) for func, Hd in iteritems(self._dynamic) if not _sp.issparse(Hd)})
                 else:
                     updates = {func: sparse_constuctor(
@@ -1824,7 +1652,7 @@ class hamiltonian(object):
                                 self._dynamic[func] = self._dynamic[func].toarray(
                                 )
                             else:
-                                self._dynamic[func] = _np.ascontiguousarray(
+                                self._dynamic[func] = _jnp.ascontiguousarray(
                                     self._dynamic[func])
                         else:
                             sparse_constuctor = getattr(_sp, fmt+"_matrix")
@@ -1861,7 +1689,7 @@ class hamiltonian(object):
         if _sp.issparse(self._static):
             new_static = self._static.toarray()
         else:
-            new_static = _np.asarray(self._static, copy=copy)
+            new_static = _jnp.asarray(self._static, copy=copy)
 
         dynamic = [([M.toarray(), func] if _sp.issparse(M) else [M, func])
                    for func, M in iteritems(self.dynamic)]
@@ -2408,12 +2236,12 @@ class hamiltonian(object):
         try:
             if other.shape != self._shape:  # only accepts square matricies
                 raise ValueError('shapes do not match')
-            if not _np.can_cast(other.dtype, self._dtype, casting=casting):
+            if not _jnp.can_cast(other.dtype, self._dtype, casting=casting):
                 raise ValueError('cannot cast types')
         except AttributeError:
             if other._shape != self._shape:  # only accepts square matricies
                 raise ValueError('shapes do not match')
-            if not _np.can_cast(other.dtype, self._dtype, casting=casting):
+            if not _jnp.can_cast(other.dtype, self._dtype, casting=casting):
                 raise ValueError('cannot cast types')
 
     ##########################
@@ -2421,7 +2249,7 @@ class hamiltonian(object):
     ##########################
 
     def _add_hamiltonian(self, other):
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         new = self.astype(result_dtype, copy=True)
 
         new._is_dense = new._is_dense or other._is_dense
@@ -2486,7 +2314,7 @@ class hamiltonian(object):
         return self
 
     def _sub_hamiltonian(self, other):
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         new = self.astype(result_dtype, copy=True)
 
         new._is_dense = new._is_dense or other._is_dense
@@ -2580,7 +2408,7 @@ class hamiltonian(object):
             elif _sp.issparse(other._static):
                 new_static_op = self.static * other._static
             else:
-                new_static_op = _np.matmul(self.static, other._static)
+                new_static_op = _jnp.matmul(self.static, other._static)
 
             # self.static * other.dynamic
             for func, Hd in iteritems(other._dynamic):
@@ -2589,7 +2417,7 @@ class hamiltonian(object):
                 elif _sp.issparse(Hd):
                     Hmul = self.static * Hd
                 else:
-                    Hmul = _np.matmul(self.static, Hd)
+                    Hmul = _jnp.matmul(self.static, Hd)
 
                 if not _check_almost_zero(Hmul):
                     new_dynamic_ops[func] = Hmul
@@ -2601,7 +2429,7 @@ class hamiltonian(object):
                 elif _sp.issparse(other._static):
                     Hmul = Hd * other._static
                 else:
-                    Hmul = _np.matmul(Hd, other._static)
+                    Hmul = _jnp.matmul(Hd, other._static)
 
                 if func in new_dynamic_ops:
                     try:
@@ -2625,7 +2453,7 @@ class hamiltonian(object):
                     elif _sp.issparse(H2):
                         H12 = H1 * H2
                     else:
-                        H12 = _np.matmul(H1, H2)
+                        H12 = _jnp.matmul(H1, H2)
 
                     func12 = func1 * func2
 
@@ -2659,7 +2487,7 @@ class hamiltonian(object):
 
     def _add_sparse(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         new = self.astype(result_dtype, copy=True)
 
         try:
@@ -2692,7 +2520,7 @@ class hamiltonian(object):
 
     def _sub_sparse(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         new = self.astype(result_dtype, copy=True)
 
         try:
@@ -2724,7 +2552,7 @@ class hamiltonian(object):
 
     def _mul_sparse(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         new = self.astype(result_dtype, copy=True)
 
         new._static = new._static * other
@@ -2746,7 +2574,7 @@ class hamiltonian(object):
         # Auxellery function to calculate the right-side multipication with another sparse matrix.
 
         # find resultant type from product
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
         # create a copy of the hamiltonian object with the previous dtype
         new = self.astype(result_dtype, copy=True)
 
@@ -2802,7 +2630,7 @@ class hamiltonian(object):
     #####################
 
     def _mul_scalar(self, other):
-        result_dtype = _np.result_type(self._dtype, other)
+        result_dtype = _jnp.result_type(self._dtype, other)
         new = self.astype(result_dtype, copy=True)
 
         try:
@@ -2827,7 +2655,7 @@ class hamiltonian(object):
         return new
 
     def _imul_scalar(self, other):
-        if not _np.can_cast(other, self._dtype, casting="same_kind"):
+        if not _jnp.can_cast(other, self._dtype, casting="same_kind"):
             raise TypeError("cannot cast types")
 
         try:
@@ -2858,7 +2686,7 @@ class hamiltonian(object):
 
     def _add_dense(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
 
         if result_dtype not in supported_dtypes:
             return NotImplemented
@@ -2904,7 +2732,7 @@ class hamiltonian(object):
 
     def _sub_dense(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
 
         if result_dtype not in supported_dtypes:
             return NotImplemented
@@ -2951,7 +2779,7 @@ class hamiltonian(object):
 
     def _mul_dense(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
 
         if result_dtype not in supported_dtypes:
             return NotImplemented
@@ -2963,13 +2791,13 @@ class hamiltonian(object):
             warnings.warn("Mixing dense objects will cast internal matrices to dense.",
                           HamiltonianEfficiencyWarning, stacklevel=3)
 
-        new._static = _np.asarray(new._static.dot(other))
+        new._static = _jnp.asarray(new._static.dot(other))
 
         if _check_almost_zero(new._static):
             new._static = _sp.dia_matrix(new._shape, dtype=new._dtype)
 
         for func in list(new._dynamic):
-            new._dynamic[func] = _np.asarray(new._dynamic[func].dot(other))
+            new._dynamic[func] = _jnp.asarray(new._dynamic[func].dot(other))
 
             if _check_almost_zero(new._dynamic[func]):
                 new._dynamic.pop(func)
@@ -2981,7 +2809,7 @@ class hamiltonian(object):
 
     def _rmul_dense(self, other):
 
-        result_dtype = _np.result_type(self._dtype, other.dtype)
+        result_dtype = _jnp.result_type(self._dtype, other.dtype)
 
         if result_dtype not in supported_dtypes:
             return NotImplemented
@@ -2994,18 +2822,18 @@ class hamiltonian(object):
                           HamiltonianEfficiencyWarning, stacklevel=3)
 
         if _sp.issparse(new._static):
-            new._static = _np.asarray(other * new._static)
+            new._static = _jnp.asarray(other * new._static)
         else:
-            new._static = _np.asarray(other.dot(new._static))
+            new._static = _jnp.asarray(other.dot(new._static))
 
         if _check_almost_zero(new._static):
             new._static = _sp.dia_matrix(new._shape, dtype=new._dtype)
 
         for func in list(new._dynamic):
             if _sp.issparse(new._dynamic[func]):
-                new._dynamic[func] = _np.asarray(other * new._dynamic[func])
+                new._dynamic[func] = _jnp.asarray(other * new._dynamic[func])
             else:
-                new._dynamic[func] = _np.asarray(other.dot(new._dynamic[func]))
+                new._dynamic[func] = _jnp.asarray(other.dot(new._dynamic[func]))
 
             if _check_almost_zero(new._dynamic[func]):
                 new._dynamic.pop(func)
@@ -3022,13 +2850,13 @@ class hamiltonian(object):
             warnings.warn("Mixing dense objects will cast internal matrices to dense.",
                           HamiltonianEfficiencyWarning, stacklevel=3)
 
-        self._static = _np.asarray(self._static.dot(other))
+        self._static = _jnp.asarray(self._static.dot(other))
 
         if _check_almost_zero(self._static):
             self._static = _sp.dia_matrix(self._shape, dtype=self._dtype)
 
         for func in list(self._dynamic):
-            self._dynamic[func] = _np.asarray(self._dynamic[func].dot(other))
+            self._dynamic[func] = _jnp.asarray(self._dynamic[func].dot(other))
 
             if _check_almost_zero(self._dynamic[func]):
                 self._dynamic.pop(func)
@@ -3048,17 +2876,17 @@ class hamiltonian(object):
             raise ValueError(
                 "quspin hamiltonian class does not support 'out' for numpy.multiply, numpy.dot, or numpy.matmul.")
 
-        if (func == _np.dot) or (func == _np.multiply) or (func == _np.matmul):
+        if (func == _jnp.dot) or (func == _jnp.multiply) or (func == _jnp.matmul):
             if pos == 0:
                 return self.__mul__(inputs[1])
             if pos == 1:
                 return self.__rmul__(inputs[0])
-        elif (func == _np.subtract):
+        elif (func == _jnp.subtract):
             if pos == 0:
                 return self.__sub__(inputs[1])
             if pos == 1:
                 return self.__rsub__(inputs[0])
-        elif (func == _np.add):
+        elif (func == _jnp.add):
             if pos == 0:
                 return self.__add__(inputs[1])
             if pos == 1:
@@ -3076,41 +2904,21 @@ class hamiltonian(object):
             raise ValueError(
                 "quspin hamiltonian class does not support 'out' for numpy.multiply or numpy.dot.")
 
-        if (func == _np.dot) or (func == _np.multiply):
+        if (func == _jnp.dot) or (func == _jnp.multiply):
 
             if ishamiltonian(inputs[0]):
                 return inputs[0].__mul__(inputs[1])
             elif ishamiltonian(inputs[1]):
                 return inputs[1].__rmul__(inputs[0])
-        elif (func == _np.subtract):
+        elif (func == _jnp.subtract):
             if ishamiltonian(inputs[0]):
                 return inputs[0].__sub__(inputs[1])
             elif ishamiltonian(inputs[1]):
                 return inputs[1].__rsub__(inputs[0])
-        elif (func == _np.add):
+        elif (func == _jnp.add):
             if ishamiltonian(inputs[0]):
                 return inputs[0].__add__(inputs[1])
             elif ishamiltonian(inputs[1]):
                 return inputs[1].__radd__(inputs[0])
 
         return NotImplemented
-
-
-def ishamiltonian(obj):
-    """Checks if instance is object of `hamiltonian` class.
-
-    Parameters
-    -----------
-    obj : 
-            Arbitraty python object.
-
-    Returns
-    --------
-    bool
-            Can be either of the following:
-
-            * `True`: `obj` is an instance of `hamiltonian` class.
-            * `False`: `obj` is NOT an instance of `hamiltonian` class.
-
-    """
-    return isinstance(obj, hamiltonian)
