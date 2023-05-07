@@ -134,7 +134,7 @@ void expm_multiply(const I n,
 {
 
 	const int num_threads = omp_get_max_threads();
-	print("num_threads = %d\n", num_threads);
+	// printf("num_threads = %d\n", num_threads);
 	std::vector<I> rco_vec(num_threads, 0);
 	std::vector<T3> vco_vec(num_threads, 0);
 	std::vector<T2> c1_threads_vec(num_threads, 0);
@@ -153,7 +153,7 @@ void expm_multiply(const I n,
 #pragma omp parallel shared(exit_loop, c1_threads, c2_threads, c3_threads, F, B1, B2, rco, vco) firstprivate(num_threads)
 	{
 		const int tid = omp_get_thread_num();
-		printf("tid = %d\n", tid);
+		// printf("tid = %d\n", tid);
 		const I items_per_thread = (n + num_threads - 1) / num_threads;
 		const I begin = std::min(items_per_thread * tid, n);
 		const I end = std::min(begin + items_per_thread, n);

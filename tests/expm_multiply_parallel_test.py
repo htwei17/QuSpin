@@ -2,8 +2,17 @@ from __future__ import print_function, division
 
 import sys, os
 
-qspin_path = os.path.join(os.getcwd(), "../")
-sys.path.insert(0, qspin_path)
+# qspin_path = os.path.join(os.getcwd(), "../")
+# sys.path.insert(0, qspin_path)
+
+# set number of OpenMP threads to run in parallel
+# uncomment this line if omp error occurs on OSX for python 3
+os.environ["KMP_DUPLICATE_LIB_OK"] = "true"
+os.environ["OMP_PROC_BIND"] = "true"
+# set number of OpenMP threads to run in parallel
+os.environ["OMP_NUM_THREADS"] = "16"
+# set number of MKL threads to run in parallel
+os.environ["MKL_NUM_THREADS"] = "16"
 
 # print(os.environ["OMP_NUM_THREADS"])
 from quspin.basis import spin_basis_1d
@@ -15,10 +24,11 @@ import numpy as np
 import time
 
 
-def test_imag_time(L=20, seed=0):
+def test_imag_time(L=22, seed=0):
     np.random.seed(seed)
 
     basis = spin_basis_1d(L, m=0, kblock=0, pblock=1, zblock=1)
+    print("basis size: {}".format(basis.Ns))
 
     J = [[1.0, i, (i + 1) % L] for i in range(L)]
     static = [["xx", J], ["yy", J], ["zz", J]]
@@ -69,7 +79,7 @@ def test_imag_time(L=20, seed=0):
     )
 
 
-def test_ramdom_matrix(N=3500, ntest=10, seed=0):
+def test_ramdom_matrix(N=5000, ntest=10, seed=0):
     np.random.seed(seed)
     
     i = 0
@@ -105,7 +115,7 @@ def test_ramdom_matrix(N=3500, ntest=10, seed=0):
     print("random matrix test time: {}s".format(t1_tot / ntest))
     print("random matrix parallel test time: {}s".format(t2_tot / ntest))
 
-def test_ramdom_int_matrix(N=3500, ntest=10, seed=0):
+def test_ramdom_int_matrix(N=5000, ntest=10, seed=0):
     np.random.seed(seed)
     i = 0
     t1_tot = 0
