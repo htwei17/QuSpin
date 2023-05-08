@@ -2,19 +2,24 @@ from __future__ import print_function, division
 
 import sys, os
 
-# qspin_path = os.path.join(os.getcwd(), "../")
-# sys.path.insert(0, qspin_path)
+qspin_path = os.path.join(os.getcwd(), "../")
+sys.path.insert(0, qspin_path)
 
+############################################
+# Before import quspin
 # set number of OpenMP threads to run in parallel
 # uncomment this line if omp error occurs on OSX for python 3
 os.environ["KMP_DUPLICATE_LIB_OK"] = "true"
 os.environ["OMP_PROC_BIND"] = "true"
 # set number of OpenMP threads to run in parallel
-os.environ["OMP_NUM_THREADS"] = "16"
+os.environ["OMP_NUM_THREADS"] = "4"
 # set number of MKL threads to run in parallel
 os.environ["MKL_NUM_THREADS"] = "16"
+# NOTE: This setting is useful for dim>5000 sparse matrix
+#       but to use this, we need to setup openmp along with C compiler
+#       so on Win/Mac, it is not easy
+############################################
 
-# print(os.environ["OMP_NUM_THREADS"])
 from quspin.basis import spin_basis_1d
 from quspin.operators import hamiltonian
 from quspin.tools.evolution import expm_multiply_parallel
@@ -28,7 +33,6 @@ def test_imag_time(L=22, seed=0):
     np.random.seed(seed)
 
     basis = spin_basis_1d(L, m=0, kblock=0, pblock=1, zblock=1)
-    print("basis size: {}".format(basis.Ns))
 
     J = [[1.0, i, (i + 1) % L] for i in range(L)]
     static = [["xx", J], ["yy", J], ["zz", J]]
@@ -81,7 +85,7 @@ def test_imag_time(L=22, seed=0):
 
 def test_ramdom_matrix(N=5000, ntest=10, seed=0):
     np.random.seed(seed)
-    
+
     i = 0
     t1_tot = 0
     t2_tot = 0
@@ -115,6 +119,7 @@ def test_ramdom_matrix(N=5000, ntest=10, seed=0):
     print("random matrix test time: {}s".format(t1_tot / ntest))
     print("random matrix parallel test time: {}s".format(t2_tot / ntest))
 
+
 def test_ramdom_int_matrix(N=5000, ntest=10, seed=0):
     np.random.seed(seed)
     i = 0
@@ -134,6 +139,8 @@ def test_ramdom_int_matrix(N=5000, ntest=10, seed=0):
         t2 = time.time()
         v2 = expm_multiply_parallel(A, a=-0.01j, dtype=np.complex128).dot(v)
         t3 = time.time()
+        t1_tot += t2 - t1
+        t2_tot += t3 - t2
 
         np.testing.assert_allclose(
             v1,
@@ -146,6 +153,7 @@ def test_ramdom_int_matrix(N=5000, ntest=10, seed=0):
 
     print("random int matrix test time: {}s".format(t1_tot / ntest))
     print("random int matrix parallel test time: {}s".format(t2_tot / ntest))
+
 
 test_imag_time()
 test_ramdom_matrix()
