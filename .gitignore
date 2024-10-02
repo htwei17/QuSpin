@@ -73,13 +73,8 @@ doctrees/
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info
 
-# build directories
-build/
-_build/
-bin/
-dist/
-
 
 
 # test script
 test.py
+install_file.txt
