@@ -1,0 +1,17 @@
+brew install llvm
+export CC=/opt/homebrew/opt/llvm/bin/clang
+export CXX=/opt/homebrew/opt/llvm/bin/clang++
+
+brew install boost
+export BOOST_ROOT="/opt/homebrew"
+
+export CPLUS_INCLUDE_PATH=/opt/homebrew/include:$CPLUS_INCLUDE_PATH
+export LDFLAGS="-L/opt/homebrew/opt/libomp/lib -lomp -L/opt/homebrew/lib"
+export CPPFLAGS="-I/opt/homebrew/opt/libomp/include -I/opt/homebrew/include"
+export CFLAGS="-Xpreprocessor -fopenmp -DNDEBUG -O3 $CPPFLAGS"
+export CXXFLAGS="-Xpreprocessor -fopenmp -DNDEBUG -O3 $CPPFLAGS"
+
+cd QuSpin-workspace/
+pip install parallel-sparse-tools/ -v
+pip install QuSpin-Extensions/ -v
+pip install QuSpin/ -v
